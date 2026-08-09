@@ -68,8 +68,8 @@ jobs:
         df -h
 
         if [ "${{ github.event.inputs.source }}" = "qsdk" ]; then
-          echo "=== Using Qualcomm QSDK (with NSS support) ==="
-          git clone --depth 1 -b main https://github.com/pengcong226/openwrt-jdc-ax1800pro.git openwrt
+          echo "=== Using QSDK 12.5 (with full NSS support) ==="
+          git clone --depth 1 -b 12.5.2783.2994 https://github.com/everything411/qsdk.git openwrt
         else
           echo "=== Using Official OpenWRT ==="
           git clone --depth 1 -b $REPO_BRANCH https://github.com/openwrt/openwrt.git openwrt
