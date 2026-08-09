@@ -1,0 +1,176 @@
+name: Build OpenWRT for JDCloud AX1800 Pro (IPQ6018)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.config'
+      - 'diy-part1.sh'
+      - 'diy-part2.sh'
+      - '.github/workflows/*.yml'
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly build on Monday 08:00 UTC
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH into container for debugging'
+        required: false
+        default: 'false'
+      source:
+        description: 'OpenWRT source (openwrt=official, qsdk=Qualcomm)'
+        required: true
+        default: 'openwrt'
+        type: choice
+        options:
+          - openwrt
+          - qsdk
+
+env:
+  REPO_BRANCH: main
+  CONFIG_FILE: .config
+  DIY_PART1: diy-part1.sh
+  DIY_PART2: diy-part2.sh
+  UPLOAD_ARTIFACT: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Free up disk space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: Initialize OpenWRT
+      run: |
+        echo "=== Init OpenWRT SDK ==="
+        sudo swapoff -a
+        sudo rm -f /swapfile
+        sudo mkdir -p /opt/swap
+        sudo fallocate -l 8G /opt/swap/swapfile
+        sudo chmod 600 /opt/swap/swapfile
+        sudo mkswap /opt/swap/swapfile
+        sudo swapon /opt/swap/swapfile
+
+        df -h
+
+        if [ "${{ github.event.inputs.source }}" = "qsdk" ]; then
+          echo "=== Using Qualcomm QSDK (with NSS support) ==="
+          git clone --depth 1 -b main https://github.com/pengcong226/openwrt-jdc-ax1800pro.git openwrt
+        else
+          echo "=== Using Official OpenWRT ==="
+          git clone --depth 1 -b $REPO_BRANCH https://github.com/openwrt/openwrt.git openwrt
+        fi
+
+        cd openwrt
+        git log -1
+
+        echo "=== Update feeds ==="
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+        echo "=== Apply custom patches ==="
+        chmod +x ../$DIY_PART1
+        chmod +x ../$DIY_PART2
+        ../$DIY_PART1 || true
+        ../$DIY_PART2 || true
+
+    - name: Load custom config
+      run: |
+        cd openwrt
+        cat ../$CONFIG_FILE > .config
+        make defconfig
+        make download -j$(nproc)
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -delete
+
+    - name: Compile firmware
+      run: |
+        cd openwrt
+        echo "=== Start compile ==="
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "BUILD_STATUS=success" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Organize output files
+      if: env.BUILD_STATUS == 'success'
+      run: |
+        cd openwrt
+        echo "=== Organize output ==="
+        mkdir -p firmware
+        cp -f bin/targets/*/*/*.bin firmware/ 2>/dev/null || true
+        cp -f bin/targets/*/*/*.img.gz firmware/ 2>/dev/null || true
+        cp -f bin/targets/*/*/*.itb firmware/ 2>/dev/null || true
+        cp -f bin/targets/*/*/*squashfs* firmware/ 2>/dev/null || true
+        cp -f bin/targets/*/*/*factory* firmware/ 2>/dev/null || true
+        cp -f bin/targets/*/*/*sysupgrade* firmware/ 2>/dev/null || true
+        ls -la firmware/
+
+    - name: Upload firmware artifact
+      if: env.BUILD_STATUS == 'success' && env.UPLOAD_ARTIFACT == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenWRT-JDCloud-AX1800Pro-${{ env.BUILD_DATE }}
+        path: openwrt/firmware/
+
+    - name: Generate release tag
+      if: env.BUILD_STATUS == 'success' && env.UPLOAD_RELEASE == 'true'
+      id: tag
+      run: |
+        echo "release_tag=JDCloud-AX1800Pro-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to release
+      if: env.BUILD_STATUS == 'success' && env.UPLOAD_RELEASE == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        files: openwrt/firmware/*
+        body: |
+          ## OpenWRT for JDCloud AX1800 Pro
+
+          **Build Date**: ${{ env.BUILD_DATE }}
+          **Kernel**: Linux 5.4.x (IPQ6018)
+          **Base**: OpenWRT ${{ env.REPO_BRANCH }}
+
+          ### Features
+          - NSS (Network Subsystem) acceleration support
+          - WiFi 6 (802.11ax) QCA6018 support
+          - 2.4GHz + 5GHz dual-band
+          - Full hardware offloading
+
+          ### Flash Instructions
+          1. 进入原厂后台 → 系统管理 → 固件升级
+          2. 选择 sysupgrade.bin 文件上传
+          3. 等待重启完成（约3-5分钟）
+
+          ### ⚠️ Important Notes
+          - 首次刷机会清除所有配置
+          - 建议保留原厂ART分区（WiFi校准数据）
+          - 如遇问题可通过串口调试
+          - 建议先刷入不死U-Boot以获得恢复能力
+
+          ### U-Boot
+          - 不死U-Boot: https://github.com/KunYi/uboot-ipq60xx-build
+          - 刷入方法: 断电按住Reset键通电，访问 http://192.168.1.1/
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: SSH Debug
+      if: github.event.inputs.ssh == 'true'
+      uses: mxschmitt/action-tmate@v3
+      timeout-minutes: 30
