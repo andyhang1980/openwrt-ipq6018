@@ -42,6 +42,37 @@ CONFIG_PACKAGE_usbutils=y
 CONFIG_PACKAGE_pciutils=y
 EOF
 
+# 5. Fix bash package missing ncursesw dependency
+# The bash package was compiled with ncursesw support but the dependency wasn't declared
+echo "=== Fixing bash package dependencies ==="
+if [ -f "feeds/packages/utils/bash/Makefile" ]; then
+  sed -i '/^define Package\/bash$/,/^endef$/ {
+    /DEPENDS:=/s/$/+libncursesw/
+  }' feeds/packages/utils/bash/Makefile
+  
+  # Also add ncursesw as a build dependency if not present
+  if ! grep -q "PKG_BUILD_DEPENDS.*ncursesw" feeds/packages/utils/bash/Makefile; then
+    sed -i '/^define Package\/bash$/a\  PKG_BUILD_DEPENDS:=ncursesw/host' feeds/packages/utils/bash/Makefile
+  fi
+  
+  echo "✓ bash Makefile patched"
+else
+  echo "✗ bash Makefile not found, attempting alternative fix..."
+  # Create a patch file if direct modification fails
+  cat > feeds/packages/utils/bash.patch <<'PATCH'
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,7 @@
+ define Package/bash
+   SECTION:=utils
+   CATEGORY:=Utilities
+   TITLE:=Bash shell
+   URL:=https://www.gnu.org/software/bash/
++  DEPENDS:=+libncursesw
+ endef
+PATCH
+fi
+
 # 5. Apply patches
 # cd target/linux/qualcommax
 # git apply ../../../patches/*.patch
