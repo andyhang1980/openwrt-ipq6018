@@ -14,45 +14,25 @@
 # 3. Enable LuCI by default
 # sed -i 's/# CONFIG_PACKAGE_luci is not set/CONFIG_PACKAGE_luci=y/' .config
 
-# 4. Add custom packages to .config
+# 4. Custom packages - ONLY add packages NOT already in main .config
 cat >> .config <<EOF
-# LuCI Applications
-CONFIG_PACKAGE_luci=y
-CONFIG_PACKAGE_luci-base=y
-CONFIG_PACKAGE_luci-compat=y
-CONFIG_PACKAGE_luci-lib-ipkg=y
-CONFIG_PACKAGE_luci-app-firewall=y
-CONFIG_PACKAGE_luci-i18n-base-en=y
-CONFIG_PACKAGE_luci-i18n-firewall-en=y
 
-# LuCI Theme
-CONFIG_PACKAGE_luci-theme-bootstrap=y
+# Additional LuCI Applications
+CONFIG_PACKAGE_luci-app-nlbwmon=y
+CONFIG_PACKAGE_luci-app-wol=y
+CONFIG_PACKAGE_luci-app-upnp=y
 
-# Network
-CONFIG_PACKAGE_dnsmasq-full=y
-CONFIG_PACKAGE_ip-full=y
-CONFIG_PACKAGE_curl=y
-CONFIG_PACKAGE_wget-ssl=y
+# Additional Network Tools
+CONFIG_PACKAGE_mtr=y
+CONFIG_PACKAGE_bind-dig=y
 
-# Utilities
-CONFIG_PACKAGE_bash=y
-CONFIG_PACKAGE_htop=y
-CONFIG_PACKAGE_nano=y
-CONFIG_PACKAGE_usbutils=y
-CONFIG_PACKAGE_pciutils=y
+# Additional Utilities  
+CONFIG_PACKAGE_screen=y
+CONFIG_PACKAGE_tmux=y
+CONFIG_PACKAGE_git=y
 EOF
 
-# 5. Fix bash package - Remove problematic bash Makefile patching
-# The original sed commands were causing Kconfig syntax errors
-# Instead, we'll skip this step as the bash package should work without modifications
-echo "=== Bash package handling ==="
-if [ -f "feeds/packages/utils/bash/Makefile" ]; then
-  echo "✓ bash Makefile found, using as-is"
-else
-  echo "✗ bash Makefile not found at feeds/packages/utils/bash/Makefile"
-fi
-
-# 5. Apply patches
+# 5. Apply patches (if any)
 # cd target/linux/qualcommax
 # git apply ../../../patches/*.patch
 # cd ../../..
