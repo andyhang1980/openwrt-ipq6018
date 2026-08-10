@@ -96,6 +96,10 @@ jobs:
           if [ -f .config ]; then
             echo "Community fork .config exists, removing problematic packages"
             sed -i 's/CONFIG_PACKAGE_bash=y/# CONFIG_PACKAGE_bash is not set/' .config
+            sed -i 's/CONFIG_PACKAGE_wget-ssl=y/# CONFIG_PACKAGE_wget-ssl is not set/' .config
+            sed -i 's/CONFIG_PACKAGE_bind-dig=y/# CONFIG_PACKAGE_bind-dig is not set/' .config
+            sed -i 's/CONFIG_PACKAGE_bind-nslookup=y/# CONFIG_PACKAGE_bind-nslookup is not set/' .config
+            sed -i 's/CONFIG_PACKAGE_bind-rndc=y/# CONFIG_PACKAGE_bind-rndc is not set/' .config
           else
             echo "No .config found, running make defconfig"
             make defconfig
