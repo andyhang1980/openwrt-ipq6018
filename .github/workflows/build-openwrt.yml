@@ -94,7 +94,8 @@ jobs:
         if [ "${{ github.event.inputs.source }}" = "qsdk" ]; then
           echo "=== Using community fork's .config ==="
           if [ -f .config ]; then
-            echo "Community fork .config exists, using it"
+            echo "Community fork .config exists, removing problematic packages"
+            sed -i 's/CONFIG_PACKAGE_bash=y/# CONFIG_PACKAGE_bash is not set/' .config
           else
             echo "No .config found, running make defconfig"
             make defconfig
